@@ -1,12 +1,12 @@
-model: edge_pix2pix
+model: pix2pix
 generator: unet
 discriminator: patchgan
 dataset: fs2k
 data_root: data/FS2K
-style: 0
+style: all
 input_size: 256
 output_size: 256
-in_channels: 4
+in_channels: 3
 out_channels: 1
 channels: [32, 64, 128, 256, 512]
 discriminator_channels: 64
@@ -26,11 +26,11 @@ lambda_L1: 100.0
 seed: 42
 num_workers: 4
 amp: true
-val_fraction: 0.1
+val_fraction: 0.0
 horizontal_flip: true
 brightness: 0.1
 contrast: 0.1
 preview_every: 5
 checkpoint_dir: checkpoints
-run_dir: runs/edge_pix2pix
-results_dir: results/edge_pix2pix
+checkpoint_stem: pix2pix_all_styles
+run_dir: runs/pix2pix_all_styles

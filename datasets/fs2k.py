@@ -16,13 +16,13 @@ def find_image(stem):
     raise FileNotFoundError(f"Missing image: {stem}.[jpg|png|jpeg]")
 
 
-def pairs_from_annotations(root, split, style):
+def pairs_from_annotations(root, split, style="all"):
+    if style != "all":
+        raise ValueError("This project now uses all FS2K styles; set style='all'")
     root = Path(root)
     annotations = json.loads((root / f"anno_{split}.json").read_text())
     pairs = []
     for item in annotations:
-        if int(item["style"]) != int(style):
-            continue
         name = Path(item["image_name"])
         if len(name.parts) != 2 or not name.parts[0].startswith("photo") or not name.parts[1].startswith("image"):
             raise ValueError(f"Unexpected FS2K image_name: {name}")
@@ -32,14 +32,14 @@ def pairs_from_annotations(root, split, style):
         sketch = find_image(root / "sketch" / sketch_dir / sketch_name)
         pairs.append((photo, sketch, name.as_posix()))
     if not pairs:
-        raise ValueError(f"No style {style} pairs in {split}")
+        raise ValueError(f"No FS2K pairs in {split}")
     return pairs
 
 
 def split_train_val(pairs, fraction=0.1, seed=42):
     indices = list(range(len(pairs)))
     random.Random(seed).shuffle(indices)
-    count = max(1, round(len(indices) * fraction))
+    count = 0 if fraction == 0 else max(1, round(len(indices) * fraction))
     val = set(indices[:count])
     return ([pair for i, pair in enumerate(pairs) if i not in val],
             [pair for i, pair in enumerate(pairs) if i in val])

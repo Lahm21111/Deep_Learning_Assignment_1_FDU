@@ -7,7 +7,7 @@ from PIL import Image
 from datasets.fs2k import FS2KDataset, pairs_from_annotations, split_train_val
 
 
-def test_pairing_style_and_split(tmp_path):
+def test_pairing_all_styles_without_validation(tmp_path):
     records = []
     for i in range(12):
         group = "photo1"
@@ -21,14 +21,14 @@ def test_pairing_style_and_split(tmp_path):
         records.append({"image_name": f"{group}/{name}", "style": i % 2})
     (tmp_path / "anno_train.json").write_text(json.dumps(records[:10]))
     (tmp_path / "anno_test.json").write_text(json.dumps(records[10:]))
-    pairs = pairs_from_annotations(tmp_path, "train", 0)
-    train, val = split_train_val(pairs, 0.2, 42)
-    assert len(train) == 4 and len(val) == 1
-    assert len(pairs_from_annotations(tmp_path, "test", 0)) == 1
+    pairs = pairs_from_annotations(tmp_path, "train", "all")
+    train, val = split_train_val(pairs, 0.0, 42)
+    assert len(train) == 10 and len(val) == 0
+    assert len(pairs_from_annotations(tmp_path, "test", "all")) == 2
     photo, sketch, _ = FS2KDataset(train, augment=True)[0]
     assert photo.shape == (3, 256, 256) and sketch.shape == (1, 256, 256)
     assert 0 <= photo.min() <= photo.max() <= 1
     assert 0 <= sketch.min() <= sketch.max() <= 1
     pairs[0][1].unlink()
     with pytest.raises(FileNotFoundError):
-        pairs_from_annotations(tmp_path, "train", 0)
+        pairs_from_annotations(tmp_path, "train", "all")

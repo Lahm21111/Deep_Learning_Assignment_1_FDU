@@ -79,7 +79,9 @@ def train_pix2pix(args, config, device):
     val_set = dataset_type(val_pairs, **kwargs)
     train_loader = DataLoader(train_set, batch_size=config["batch_size"], shuffle=True,
                               num_workers=config["num_workers"])
-    val_loader = DataLoader(val_set, batch_size=config["batch_size"], num_workers=config["num_workers"])
+    val_loader = (DataLoader(val_set, batch_size=config["batch_size"], num_workers=config["num_workers"])
+                  if val_pairs else None)
+    preview_set = val_set if val_pairs else dataset_type(train_pairs[:1], **kwargs)
     generator = UNet(config["in_channels"], config["out_channels"], config["channels"]).to(device)
     discriminator = PatchGAN(config["in_channels"], config["out_channels"],
                              config["discriminator_channels"]).to(device)
@@ -110,12 +112,12 @@ def train_pix2pix(args, config, device):
         if state.get("scaler_G"):
             scaler_G.load_state_dict(state["scaler_G"])
             scaler_D.load_state_dict(state["scaler_D"])
-        start, best = state["epoch"] + 1, state["best_val_loss"]
+        start, best = state["epoch"] + 1, state.get("best_selection_loss", state.get("best_val_loss", float("inf")))
     if start >= config["epochs"]:
         print(f"Checkpoint is already at epoch {start}; configured epochs={config['epochs']}")
         return
     suffix = "_overfit" if args.overfit else ""
-    checkpoint_stem = config["model"]
+    checkpoint_stem = config.get("checkpoint_stem", config["model"])
     checkpoint_dir = Path(config["checkpoint_dir"])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     run_dir = Path(config["run_dir"] + suffix)
@@ -145,47 +147,57 @@ def train_pix2pix(args, config, device):
             step_seconds += time.perf_counter() - start_step
             step_count += 1
         generator.eval()
-        val_l1 = 0.0
-        with torch.no_grad():
-            for photo, sketch, _ in val_loader:
-                photo, sketch = photo.to(device), sketch.to(device)
-                val_l1 += torch.nn.functional.l1_loss(generator(photo), sketch).item() * len(photo)
-        val_l1 /= len(val_set)
+        val_l1 = None
+        if val_loader is not None:
+            val_l1 = 0.0
+            with torch.no_grad():
+                for photo, sketch, _ in val_loader:
+                    photo, sketch = photo.to(device), sketch.to(device)
+                    val_l1 += torch.nn.functional.l1_loss(generator(photo), sketch).item() * len(photo)
+            val_l1 /= len(val_set)
         if scheduler_G:
             scheduler_G.step()
             scheduler_D.step()
         averages = {key: total / len(train_set) for key, total in totals.items()}
         for key, value in averages.items():
             writer.add_scalar(f"train/{key}", value, epoch + 1)
-        writer.add_scalar("validation/L1", val_l1, epoch + 1)
+        if val_l1 is not None:
+            writer.add_scalar("validation/L1", val_l1, epoch + 1)
         print(f"epoch={epoch+1} D={averages['loss_D']:.5f} G={averages['loss_G']:.5f} "
-              f"G_L1={averages['loss_G_L1']:.5f} val_L1={val_l1:.5f}", flush=True)
+              f"G_L1={averages['loss_G_L1']:.5f} val_L1={val_l1 if val_l1 is not None else 'n/a'}", flush=True)
         if (epoch + 1) % config["preview_every"] == 0 or epoch == 0:
-            photo, sketch, _ = val_set[0]
+            photo, sketch, _ = preview_set[0]
             with torch.no_grad():
                 prediction = generator(photo.unsqueeze(0).to(device))[0].cpu()
             save_comparison(photo[:3], prediction, sketch, run_dir / f"epoch_{epoch+1:04d}.png")
             panel = torch.cat((photo[:3], prediction.repeat(3, 1, 1), sketch.repeat(3, 1, 1)), dim=2)
             writer.add_image("comparison", panel, epoch + 1)
-        improved = val_l1 < best
-        best = min(best, val_l1)
+        selection_loss = val_l1 if val_l1 is not None else averages["loss_G_L1"]
+        improved = selection_loss < best
+        best = min(best, selection_loss)
         state = {"generator": generator.state_dict(), "discriminator": discriminator.state_dict(),
                  "optimizer_G": optimizer_G.state_dict(), "optimizer_D": optimizer_D.state_dict(),
                  "scheduler_G": scheduler_G.state_dict() if scheduler_G else None,
                  "scheduler_D": scheduler_D.state_dict() if scheduler_D else None,
                  "scaler_G": scaler_G.state_dict(), "scaler_D": scaler_D.state_dict(),
-                 "epoch": epoch, "best_val_loss": best, "config": config}
+                 "epoch": epoch, "best_val_loss": best if val_l1 is not None else None,
+                 "best_selection_loss": best,
+                 "selection_metric": "validation_l1" if val_l1 is not None else "train_l1",
+                 "config": config}
         torch.save(state, checkpoint_dir / f"{checkpoint_stem}{suffix}_last.pth")
         if improved:
             torch.save(state, checkpoint_dir / f"{checkpoint_stem}{suffix}_best.pth")
     writer.close()
     usage = {"average_iteration_seconds": step_seconds / step_count,
              "peak_gpu_memory_mib": torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else None,
-             "best_validation_l1": best, "epochs": config["epochs"]}
+             "best_validation_l1": best if val_loader is not None else None,
+             "best_train_l1": best if val_loader is None else None,
+             "train_pairs": len(train_set), "validation_pairs": len(val_set),
+             "epochs": config["epochs"]}
     (run_dir / "summary.json").write_text(__import__("json").dumps(usage, indent=2))
     print(usage)
 
 
 if __name__ == "__main__":
     from train import main
-    main(default_config="configs/pix2pix.yaml", allowed_models=("pix2pix", "edge_pix2pix"))
+    main(default_config="configs/pix2pix_all_styles.yaml", allowed_models=("pix2pix", "edge_pix2pix"))

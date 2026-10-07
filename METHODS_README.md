@@ -1,33 +1,24 @@
 # 三种人脸照片转素描方法
 
-本项目使用 FS2K 配对照片和素描训练三种方法。输入照片与输出素描都按 256×256 处理，输出是灰度图。代码、模型权重与本说明文件都在仓库根目录。
+三个模型均使用 FS2K 官方训练集全部 **1,058 对**样本、256×256 输入输出和灰度素描标签。
 
-| 方法名称 | 输入与模型 | 训练损失 | 输出特点 |
+| 方法名称 | 输入与模型 | 训练损失 | 在当前照片上的特点 |
 | --- | --- | --- | --- |
-| **U-Net L1** | RGB 照片 → U-Net | L1 | 脸部结构基本保留，但线条偏模糊。 |
-| **U-Net L1 GAN** | RGB 照片 → U-Net 生成器；PatchGAN 判别照片与素描是否匹配 | GAN + 100 × L1 | 线条更清楚，头发和五官更像手绘素描。 |
-| **U-Net Edge** | RGB 照片与 Canny 边缘图拼成 4 通道 → U-Net；再由 PatchGAN 训练 | GAN + 100 × L1 | 边缘辅助突出轮廓，但可能产生多余的线条。 |
+| **U-Net L1** | RGB → U-Net | L1 | 脸部结构基本保留，但线条较模糊。 |
+| **U-Net L1 GAN** | RGB → U-Net 生成器；条件 PatchGAN 判别器 | GAN + 100 × L1 | 头发、眼镜和五官线条较清楚。 |
+| **U-Net Edge** | RGB 与 Canny 边缘图拼接为 4 通道 → U-Net；条件 PatchGAN 判别器 | GAN + 100 × L1 | 轮廓更突出，但部分线条可能偏多。 |
 
-U-Net Edge 使用双边滤波后进行 Canny 边缘检测，阈值为 **45/110**。边缘图是附加输入，不会直接叠到生成的素描上；真实素描标签也保持原样。
+U-Net Edge 的 Canny 阈值是 **45/110**。边缘图只作辅助输入，不直接叠加到输出上；真实素描标签保持原样。
 
-## 当前效果对比
+## 当前效果
 
-[查看最新照片的结果](results/image_comparison.png)：原图｜U-Net L1｜U-Net Edge｜U-Net L1 GAN。
-
-**就这张照片的视觉效果而言，U-Net L1 GAN 最好。** 相比 U-Net L1，它的线条更清楚；相比 U-Net Edge，面部细节更自然。这个结论是对当前照片的主观观察，不代表所有照片都会有相同排序。
+[查看 `image_2.jpg` 的对比图](results/image_2_all_styles_four_models.png)：原图｜U-Net L1｜U-Net L1 GAN｜U-Net Edge。对这张照片的主观观察是 **U-Net L1 GAN 效果最好**；U-Net L1 较平滑，U-Net Edge 保留了轮廓但有些杂线。此结论不等于独立测试集排名。三个全量模型没有留出验证集，最低训练 L1 也不能替代泛化评价。
 
 ## 对自己的照片推理
 
-在仓库根目录运行，使用 U-Net L1 GAN 生成一张素描：
-
 ```bash
-python inference.py --checkpoint checkpoints/pix2pix_best.pth --input image.jpg --output results/image_l1_gan.png
+python inference.py --checkpoint checkpoints/pix2pix_all_styles_best.pth --input image_2.jpg --output results/my_sketch.png
+python compare_models.py --input image_2.jpg --output results/my_comparison.png
 ```
 
-一次生成三种方法的对比图：
-
-```bash
-python compare_models.py --input image.jpg --output results/image_comparison.png
-```
-
-数据下载、预处理和训练步骤仍见[原 README](README.md)。
+数据下载、预处理与训练命令见 [README.md](README.md)。

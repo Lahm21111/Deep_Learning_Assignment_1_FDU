@@ -13,7 +13,7 @@ from utils.metrics import batch_metrics
 from utils.visualization import save_comparison, save_gray, save_model_comparison
 
 
-def main(default_config="configs/unet.yaml", allowed_models=None):
+def main(default_config="configs/unet_all_styles.yaml", allowed_models=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default=default_config)
     parser.add_argument("--checkpoint")
@@ -28,7 +28,9 @@ def main(default_config="configs/unet.yaml", allowed_models=None):
     if allowed_models is not None and config["model"] not in allowed_models:
         raise ValueError(f"This evaluation entry point accepts {allowed_models}, got {config['model']}")
     pix2pix = config["model"] in ("pix2pix", "edge_pix2pix")
-    checkpoint = args.checkpoint or (str(Path(config["checkpoint_dir"]) / f"{config['model']}_best.pth") if pix2pix else "checkpoints/best.pth")
+    checkpoint_stem = config.get("checkpoint_stem", config["model"] if pix2pix else "")
+    suffix = "_best.pth" if pix2pix else "best.pth"
+    checkpoint = args.checkpoint or str(Path(config["checkpoint_dir"]) / f"{checkpoint_stem}{suffix}")
     output = Path(args.output or config.get("results_dir", "results/pix2pix" if pix2pix else "results"))
     device = device_for(args.device)
     dataset_type = EdgeFS2KDataset if config["model"] == "edge_pix2pix" else FS2KDataset

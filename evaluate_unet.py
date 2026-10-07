@@ -3,4 +3,4 @@ from evaluate import main
 
 
 if __name__ == "__main__":
-    main(default_config="configs/unet.yaml", allowed_models=("unet",))
+    main(default_config="configs/unet_all_styles.yaml", allowed_models=("unet",))

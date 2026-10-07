@@ -14,13 +14,12 @@ from utils.visualization import save_comparison
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", default="data/FS2K")
-    parser.add_argument("--style", type=int, default=0)
     parser.add_argument("--preview", default="results/dataset_preview.png")
     args = parser.parse_args()
     root = Path(args.data_root)
-    train = pairs_from_annotations(root, "train", args.style)
-    test = pairs_from_annotations(root, "test", args.style)
-    fitting, validation = split_train_val(train)
+    train = pairs_from_annotations(root, "train", "all")
+    test = pairs_from_annotations(root, "test", "all")
+    fitting, validation = split_train_val(train, fraction=0)
     names = [set(p[2] for p in group) for group in (fitting, validation, test)]
     assert not (names[0] & names[1] or names[0] & names[2] or names[1] & names[2])
     sizes = {}

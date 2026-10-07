@@ -1,5 +1,7 @@
 import argparse
+import json
 import random
+import time
 from pathlib import Path
 
 import numpy as np
@@ -64,7 +66,7 @@ def run_epoch(model, loader, criterion, device, optimizer=None, scaler=None, amp
     return total / len(loader.dataset)
 
 
-def main(default_config="configs/unet.yaml", allowed_models=None):
+def main(default_config="configs/unet_all_styles.yaml", allowed_models=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default=default_config)
     parser.add_argument("--resume")
@@ -98,8 +100,9 @@ def main(default_config="configs/unet.yaml", allowed_models=None):
     val_set = FS2KDataset(val_pairs, **kwargs)
     train_loader = DataLoader(train_set, batch_size=config["batch_size"], shuffle=True,
                               num_workers=config["num_workers"])
-    val_loader = DataLoader(val_set, batch_size=config["batch_size"],
-                            num_workers=config["num_workers"])
+    val_loader = (DataLoader(val_set, batch_size=config["batch_size"],
+                             num_workers=config["num_workers"]) if val_pairs else None)
+    preview_set = val_set if val_pairs else FS2KDataset(train_pairs[:1], **kwargs)
     model = make_model(config).to(device)
     print(f"device={device} parameters={count_parameters(model):,} train={len(train_set)} val={len(val_set)}")
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
@@ -109,30 +112,53 @@ def main(default_config="configs/unet.yaml", allowed_models=None):
     start, best = 0, float("inf")
     if args.resume:
         state = load_checkpoint(args.resume, model, optimizer, scheduler, device)
-        start, best = state["epoch"] + 1, state["best_val_loss"]
+        start, best = state["epoch"] + 1, state.get("best_selection_loss", state.get("best_val_loss", float("inf")))
     checkpoint_dir = Path(config["checkpoint_dir"])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    writer = SummaryWriter(config["run_dir"])
+    checkpoint_stem = config.get("checkpoint_stem", "")
+    run_dir = Path(config["run_dir"])
+    writer = SummaryWriter(run_dir)
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    training_seconds = 0.0
     for epoch in range(start, config["epochs"]):
+        start_epoch = time.perf_counter()
         train_loss = run_epoch(model, train_loader, criterion, device, optimizer, scaler, config["amp"])
-        val_loss = run_epoch(model, val_loader, criterion, device, amp=config["amp"])
+        training_seconds += time.perf_counter() - start_epoch
+        val_loss = run_epoch(model, val_loader, criterion, device, amp=config["amp"]) if val_loader else None
         scheduler.step()
-        writer.add_scalars("loss", {"train": train_loss, "validation": val_loss}, epoch + 1)
-        print(f"epoch={epoch+1} train={train_loss:.6f} val={val_loss:.6f}", flush=True)
-        improved = val_loss < best
-        best = min(best, val_loss)
+        losses = {"train": train_loss}
+        if val_loss is not None:
+            losses["validation"] = val_loss
+        writer.add_scalars("loss", losses, epoch + 1)
+        print(f"epoch={epoch+1} train={train_loss:.6f} "
+              f"val={val_loss if val_loss is not None else 'n/a'}", flush=True)
+        selection_loss = val_loss if val_loss is not None else train_loss
+        improved = selection_loss < best
+        best = min(best, selection_loss)
         state = {"epoch": epoch, "model": model.state_dict(), "optimizer": optimizer.state_dict(),
-                 "scheduler": scheduler.state_dict(), "best_val_loss": best, "config": config}
-        torch.save(state, checkpoint_dir / "last.pth")
+                 "scheduler": scheduler.state_dict(),
+                 "best_val_loss": best if val_loss is not None else None,
+                 "best_selection_loss": best,
+                 "selection_metric": "validation_l1" if val_loss is not None else "train_l1",
+                 "config": config}
+        torch.save(state, checkpoint_dir / f"{checkpoint_stem}last.pth")
         if improved:
-            torch.save(state, checkpoint_dir / "best.pth")
+            torch.save(state, checkpoint_dir / f"{checkpoint_stem}best.pth")
         if (epoch + 1) % config["preview_every"] == 0 or epoch == 0:
             model.eval()
-            photo, sketch, _ = val_set[0]
+            photo, sketch, _ = preview_set[0]
             with torch.no_grad():
                 prediction = model(photo.unsqueeze(0).to(device))[0]
-            save_comparison(photo, prediction, sketch, Path(config["run_dir"]) / f"epoch_{epoch+1:04d}.png")
+            save_comparison(photo, prediction, sketch, run_dir / f"epoch_{epoch+1:04d}.png")
     writer.close()
+    summary = {"train_pairs": len(train_set), "validation_pairs": len(val_set),
+               "epochs": config["epochs"], "best_validation_l1": best if val_loader else None,
+               "best_train_l1": best if not val_loader else None,
+               "average_iteration_seconds": training_seconds / (len(train_loader) * (config["epochs"] - start)),
+               "peak_gpu_memory_mib": torch.cuda.max_memory_allocated(device) / 2**20 if device.type == "cuda" else None}
+    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    print(summary, flush=True)
 
 
 if __name__ == "__main__":

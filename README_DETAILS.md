@@ -1,55 +1,29 @@
-# Face2Sketch
+# Face2Sketch implementation details
 
-One PyTorch project with three trained methods on the same FS2K style-0 split: **U-Net L1**, **U-Net L1 GAN**, and **U-Net Edge**.
+The repository keeps three models trained on **all 1,058 pairs in the official FS2K training split**. They share the same 256×256 paired photo/sketch preprocessing and `[0,1]` output range. No validation subset is held out in these runs; `best` means lowest **training L1**, not best test quality. The official test split remains separate.
 
-| Method | Config | Generator input | Objective | Best checkpoint |
-| --- | --- | --- | --- | --- |
-| U-Net L1 | `configs/unet.yaml` | RGB (3 channels) | L1 | `checkpoints/best.pth` |
-| U-Net L1 GAN | `configs/pix2pix.yaml` | RGB (3 channels) | GAN + 100 × L1 | `checkpoints/pix2pix_best.pth` |
-| U-Net Edge | `configs/edge_pix2pix.yaml` | RGB + Canny 45/110 (4 channels) | GAN + 100 × L1 | `checkpoints/edge_pix2pix_best.pth` |
+| Method | Generator input | Generator parameters | Objective | Checkpoint |
+| --- | --- | ---: | --- | --- |
+| U-Net L1 | RGB, 3 channels | 7,849,601 | L1 | `checkpoints/unet_all_styles_best.pth` |
+| U-Net L1 GAN | RGB, 3 channels | 7,849,601 | GAN + 100 × L1 | `checkpoints/pix2pix_all_styles_best.pth` |
+| U-Net Edge | RGB + Canny, 4 channels | 7,849,889 | GAN + 100 × L1 | `checkpoints/edge_pix2pix_all_styles_best.pth` |
 
-U-Net Edge creates its fourth channel after the paired geometric transform. It applies a bilateral filter (`d=5`, `sigmaColor=35`, `sigmaSpace=5`) and Canny (`45/110`, `L2gradient=True`). All methods produce a `[0,1]` grayscale tensor and save it as a 256×256 grayscale PNG. Checkpoints for all three methods are retained.
+Both GAN models use a conditional 70×70 PatchGAN discriminator. Edge detection uses bilateral filtering (`d=5`, `sigmaColor=35`, `sigmaSpace=5`) and Canny thresholds `45/110`, then concatenates the edge map with the RGB photo. The ground-truth sketch is unchanged. Inference loads only the generator.
 
-## Data and setup
+## Run
 
-Run all commands below from the repository root. Download `FS2K.zip` from the [official FS2K repository](https://github.com/DengPingFan/FS2K) ([direct Google Drive page](https://drive.google.com/file/d/1saIMhQ3dc5_ftkfGmBPbCluRn_zy7QQp/view?usp=sharing)), place it at `data/FS2K.zip`, then extract it:
-
-```bash
-mkdir -p data
-unzip data/FS2K.zip -d data
-```
-
-The archive contains its own `FS2K/` folder. Confirm that `data/FS2K/` contains `photo/`, `sketch/`, `anno_train.json`, and `anno_test.json`. The dataset is excluded from Git. Skip extraction if those files are already present. Training uses a seeded 10% validation split from the selected training style.
+Follow [README.md](README.md) to download FS2K and install dependencies. Commands below run from the repository root:
 
 ```bash
-python -m pip install -r requirements.txt
+python scripts/check_dataset.py --data-root data/FS2K
 python -m pytest tests -q
-python scripts/check_dataset.py --data-root data/FS2K --style 0
+
+python train_unet.py --config configs/unet_all_styles.yaml
+python train_pix2pix.py --config configs/pix2pix_all_styles.yaml
+python train_pix2pix.py --config configs/edge_pix2pix_all_styles.yaml
+
+python inference.py --checkpoint checkpoints/edge_pix2pix_all_styles_best.pth --input image_2.jpg --output results/edge_sketch.png
+python compare_models.py --input image_2.jpg --output results/comparison.png
 ```
 
-`check_dataset.py` verifies pairs, missing files, image decoding, and split overlap; it writes `results/dataset_preview.png`. No offline resize step is needed. At read time, photos become RGB and sketches become grayscale, both are resized to 256×256 and normalized to `[0,1]`. Training applies the same random horizontal flip to each photo/sketch pair; brightness and contrast augmentation affect only photos. Validation and single-photo inference use deterministic transforms. For the edge config, the Canny map is calculated from the transformed photo and concatenated as a fourth channel; it does not replace the true sketch label.
-
-## Training
-
-`train_unet.py` trains U-Net L1. `train_pix2pix.py` trains U-Net L1 GAN or U-Net Edge; choose the YAML file with `--config`.
-
-```bash
-python train_unet.py --config configs/unet.yaml
-
-python train_pix2pix.py --config configs/pix2pix.yaml
-
-python train_pix2pix.py --config configs/edge_pix2pix.yaml
-```
-
-Training supports `--overfit 16`, `--resume CHECKPOINT`, and, for U-Net L1 GAN or U-Net Edge, `--generator_checkpoint CHECKPOINT`. U-Net L1 writes `best.pth` / `last.pth`; U-Net L1 GAN writes `pix2pix_best.pth` / `pix2pix_last.pth`; U-Net Edge writes `edge_pix2pix_best.pth` / `edge_pix2pix_last.pth`, all under `checkpoints/`. No retraining is needed to use the included weights. TensorBoard logs are under `runs/`.
-
-## Inference and one-image comparison
-
-```bash
-python inference.py --checkpoint checkpoints/edge_pix2pix_best.pth --input image.jpg --output results/image_edge_sketch.png
-python compare_models.py --input image.jpg --output results/image_comparison.png
-```
-
-`compare_models.py` produces one panel ordered input photo, U-Net L1, U-Net Edge, then U-Net L1 GAN. It uses the same inference preprocessing as `inference.py`. Both commands support `--resize-mode stretch|center_crop|letterbox`; `stretch` is the training-compatible default. Use `center_crop` for nonsquare portraits when you want to preserve facial proportions.
-
-Use your own photo with `inference.py` for one sketch, or `compare_models.py` for one panel showing all three model outputs. `image.jpg` is the latest example input.
+The `--resume` option restores an experiment's `last` checkpoint, including optimizer state. `--generator_checkpoint` initializes either GAN generator from a compatible U-Net checkpoint. TensorBoard logs and periodic previews are under `runs/`. The default comparison order is input photo, U-Net L1, U-Net L1 GAN, U-Net Edge.

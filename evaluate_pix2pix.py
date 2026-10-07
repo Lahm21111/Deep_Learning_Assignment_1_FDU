@@ -3,4 +3,4 @@ from evaluate import main
 
 
 if __name__ == "__main__":
-    main(default_config="configs/pix2pix.yaml", allowed_models=("pix2pix", "edge_pix2pix"))
+    main(default_config="configs/pix2pix_all_styles.yaml", allowed_models=("pix2pix", "edge_pix2pix"))
