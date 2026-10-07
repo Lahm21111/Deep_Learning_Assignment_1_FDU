@@ -21,7 +21,7 @@ def main():
     parser.add_argument("--resize-mode", choices=("stretch", "center_crop", "letterbox"), default="stretch")
     args = parser.parse_args()
     device = device_for(args.device)
-    checkpoints = (args.unet, args.pix2pix, args.edge_pix2pix)
+    checkpoints = (args.unet, args.edge_pix2pix, args.pix2pix)
     models = [load_generator(path, device) for path in checkpoints]
     sizes = {config["input_size"] for _, config in models}
     if len(sizes) != 1:
@@ -36,7 +36,7 @@ def main():
     width, height = photo_image.size
     canvas = Image.new("RGB", (4 * width, height + 24), "white")
     draw = ImageDraw.Draw(canvas)
-    titles = ("Input photo", "U-Net + L1", "Pix2Pix RGB", "Pix2Pix + edges 45/110")
+    titles = ("Input photo", "U-Net L1", "U-Net Edge", "U-Net L1 GAN")
     for index, (panel, title) in enumerate(zip(panels, titles)):
         canvas.paste(panel, (index * width, 24))
         draw.text((index * width + 5, 5), title, fill="black")

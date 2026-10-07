@@ -12,7 +12,7 @@ U-Net Edge 使用双边滤波后进行 Canny 边缘检测，阈值为 **45/110**
 
 ## 当前效果对比
 
-[查看最新照片的结果](results/image_comparison.png)：原图｜U-Net L1｜U-Net L1 GAN｜U-Net Edge。
+[查看最新照片的结果](results/image_comparison.png)：原图｜U-Net L1｜U-Net Edge｜U-Net L1 GAN。
 
 **就这张照片的视觉效果而言，U-Net L1 GAN 最好。** 相比 U-Net L1，它的线条更清楚；相比 U-Net Edge，面部细节更自然。这个结论是对当前照片的主观观察，不代表所有照片都会有相同排序。
 

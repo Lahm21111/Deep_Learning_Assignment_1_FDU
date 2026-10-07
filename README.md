@@ -87,6 +87,6 @@ python inference.py --checkpoint checkpoints/pix2pix_best.pth --input image.jpg 
 python compare_models.py --input image.jpg --output results/image_comparison.png
 ```
 
-`compare_models.py` 会生成一张“原图｜U-Net L1｜U-Net L1 GAN｜U-Net Edge”的四栏图。输入不是正方形时，可加 `--resize-mode center_crop` 保持人脸比例；默认 `stretch` 与训练时缩放方式一致。
+`compare_models.py` 会生成一张“原图｜U-Net L1｜U-Net Edge｜U-Net L1 GAN”的四栏图。输入不是正方形时，可加 `--resize-mode center_crop` 保持人脸比例；默认 `stretch` 与训练时缩放方式一致。
 
 更多代码说明见 [`README_DETAILS.md`](README_DETAILS.md)。

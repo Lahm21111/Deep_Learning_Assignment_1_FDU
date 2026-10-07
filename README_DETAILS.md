@@ -50,6 +50,6 @@ python inference.py --checkpoint checkpoints/edge_pix2pix_best.pth --input image
 python compare_models.py --input image.jpg --output results/image_comparison.png
 ```
 
-`compare_models.py` produces one panel containing the input photo and outputs from U-Net L1, U-Net L1 GAN, and U-Net Edge. It uses the same inference preprocessing as `inference.py`. Both commands support `--resize-mode stretch|center_crop|letterbox`; `stretch` is the training-compatible default. Use `center_crop` for nonsquare portraits when you want to preserve facial proportions.
+`compare_models.py` produces one panel ordered input photo, U-Net L1, U-Net Edge, then U-Net L1 GAN. It uses the same inference preprocessing as `inference.py`. Both commands support `--resize-mode stretch|center_crop|letterbox`; `stretch` is the training-compatible default. Use `center_crop` for nonsquare portraits when you want to preserve facial proportions.
 
 Use your own photo with `inference.py` for one sketch, or `compare_models.py` for one panel showing all three model outputs. `image.jpg` is the latest example input.
