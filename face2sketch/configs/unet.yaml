@@ -1,0 +1,27 @@
+model: unet
+dataset: fs2k
+data_root: data/FS2K
+style: 0
+input_size: 256
+output_size: 256
+in_channels: 3
+out_channels: 1
+channels: [32, 64, 128, 256, 512]
+batch_size: 8
+epochs: 150
+optimizer: adam
+learning_rate: 0.0002
+weight_decay: 0.0
+scheduler: cosine
+loss: l1
+ssim_weight: 0.2
+seed: 42
+num_workers: 4
+amp: true
+val_fraction: 0.1
+horizontal_flip: true
+brightness: 0.1
+contrast: 0.1
+preview_every: 5
+checkpoint_dir: checkpoints
+run_dir: runs/unet
